@@ -1,69 +1,103 @@
-const express = require('express');
-const mysql = require('mysql2/promise');
-
-const cors = require('cors');
+const express = require("express");
+const mysql = require("mysql2/promise");
+const cors = require("cors");
 
 const app = express();
-
-let connection = {
-  query: (cmd) => new Promise.resolve(['something']),
-};
+let connection;
 
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(cors());
 
-app.get('/todos', (req, res) => {
-  connection.query('select * from todos').then(([cols]) => res.json(cols));
+// Get all todos
+app.get("/todos", async (req, res) => {
+  try {
+    const [rows] = await connection.query("SELECT * FROM todos");
+    res.json(rows);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
-app.post('/add', (req, res) => {
-  const { description } = req.body;
-
-  connection
-    .query(`insert into todos (description) values ('${description}')`)
-    .then(() => {
-      res.json({ todo: { description } });
-    });
+// Add a new todo
+app.post("/add", async (req, res) => {
+  try {
+    const { description } = req.body;
+    const [result] = await connection.query(
+      "INSERT INTO todos (description) VALUES (?)",
+      [description]
+    );
+    res.json({ id: result.insertId, description });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
-app.get('/test', (req, res) => {
-  res.end('this is working');
+// Delete a todo
+app.delete("/delete/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    await connection.query("DELETE FROM todos WHERE id = ?", [id]);
+    res.json({ message: "Todo deleted successfully" });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
-app.get('/', (req, res) => {
-  res.end('app is running');
+// Update a todo
+app.put("/update/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { description } = req.body;
+    await connection.query("UPDATE todos SET description = ? WHERE id = ?", [
+      description,
+      id,
+    ]);
+    res.json({ id, description });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Test route
+app.get("/test", (req, res) => {
+  res.send("This is working");
+});
+
+// Root route
+app.get("/", (req, res) => {
+  res.send("App is running");
 });
 
 const PORT = 3001;
-const isProd = process.env.NODE_ENV === 'production';
-const password = process.env.DB_PASSWORD || 'password';
-const dbUser = process.env.DB_USER || 'root';
 
-const setupDb = (db) => {
-  db.query('drop database todo_app;');
-
-  db.query('create database todo_app;')
-    .then((result) => {
-      return db.query('use todo_app;');
-    })
-    .then(() =>
-      db.query(
-        'create table todos (description varchar(255), id int primary key auto_increment);'
-      )
-    )
-    .catch(console.log)
-    .finally(() => db.query('use todo_app;'));
+// Database setup
+const setupDb = async (db) => {
+  try {
+    await db.query("CREATE DATABASE IF NOT EXISTS todo_app;");
+    await db.query("USE todo_app;");
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS todos (
+        id INT PRIMARY KEY AUTO_INCREMENT,
+        description VARCHAR(255) NOT NULL
+      );
+    `);
+  } catch (error) {
+    console.error("Database setup error:", error);
+  }
 };
 
+// MySQL Connection
 mysql
   .createConnection({
-    host: isProd ? 'mysql' : 'localhost', // for container use 'mysql' otherwise use 'localhost'
-    user: dbUser,
-    password,
+    host: process.env.MYSQL_HOST || "localhost",
+    user: process.env.MYSQL_USER || "root",
+    password: process.env.MYSQL_PASSWORD || "password",
+    database: process.env.MYSQL_DATABASE || "todo_app",
   })
-  .then((_connection) => {
+  .then(async (_connection) => {
     connection = _connection;
-    setupDb(connection);
-    app.listen(PORT, () => console.log('Server is running on', PORT));
-  });
+    await setupDb(connection);
+    app.listen(PORT, () => console.log("Server is running on port", PORT));
+  })
+  .catch((err) => console.error("Database connection error:", err));

@@ -1,5 +1,4 @@
-version: '3.7'
-name: todo-app
+version: '3.8'
 
 services:
   todo-frontend:
@@ -9,6 +8,8 @@ services:
       - 4000:80
     networks:
       - todo-app
+    environment:
+      - BACKEND_SERVER=${BACKEND_SERVER}
     depends_on:
       - todo-backend
 
@@ -20,22 +21,8 @@ services:
     networks:
       - todo-app
     environment:
-      - NODE_ENV=production
-      - DB_USER=root
-      - DB_PASSWORD=password
-    depends_on:
-      - mysql
-
-  mysql:
-    container_name: mysql
-    image: mysql:5.7
-    volumes:
-      - ./mysql:/var/lib/mysql
-    environment:
-      MYSQL_ROOT_PASSWORD: password
-      MYSQL_DATABASE: todo_app
-    networks:
-      - todo-app
-
+      - MYSQL_HOST=${MYSQL_HOST}
+      - MYSQL_USER=${MYSQL_USER}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
 networks:
   todo-app:
